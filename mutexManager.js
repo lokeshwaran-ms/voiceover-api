@@ -5,6 +5,7 @@ const crypto = require('crypto');
 class MutexManager {
     constructor(cacheDirName = "voiceover-cache") {
         this.cacheDir = path.join(__dirname, cacheDirName);
+        this.fileMapPath = path.join(__dirname, cacheDirName, "fileMap.json");
         this.activeTasks = new Map(); // This acts as mutex storage
         this.initializeCache();
     }
@@ -51,6 +52,10 @@ class MutexManager {
 
         try {
             const result = await promise;
+            const fileMap = JSON.parse(await fs.readFile(this.fileMapPath, 'utf8').catch(() => '{}'));
+            fileMap[text] = result;
+            await fs.writeFile(this.fileMapPath, JSON.stringify(fileMap, null, 2));
+            console.log(`[Mutex] Audio cached: ${path.basename(result)}`);
             return result;
         } finally {
             this.activeTasks.delete(cacheKey);
