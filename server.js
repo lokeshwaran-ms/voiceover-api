@@ -1,14 +1,14 @@
-import { createServer } from 'http';
-import { parse } from 'url';
-import { StringDecoder } from 'string_decoder';
-import archiver from 'archiver';
-import { ElevenLabsClient } from '@elevenlabs/elevenlabs-js';
-import { corsHeaders, generateVoiceOver, spriteAudio } from './utils.js';
-import { rm } from 'fs/promises';
-import path from 'path';
+const http = require('http');
+const url = require('url');
+const { StringDecoder } = require('string_decoder');
+const archiver = require('archiver');
+const { ElevenLabsClient } = require('@elevenlabs/elevenlabs-js');
+const { corsHeaders, generateVoiceOver, spriteAudio } = require('./utils.js');
+const { rm } = require('fs/promises');
+const path = require('path');
 
-const server = createServer((req, res) => {
-    const parsedUrl = parse(req.url, true);
+const server = http.createServer((req, res) => {
+    const parsedUrl = url.parse(req.url, true);
     const errorResponeHeaders = { ...corsHeaders, 'Content-Type': 'application/json' };
     console.log(`[${req.method}] ${parsedUrl.pathname}`);
 
