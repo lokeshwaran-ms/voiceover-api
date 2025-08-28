@@ -13,7 +13,8 @@
     "@elevenlabs/elevenlabs-js": "^2.7.0",
     "archiver": "^7.0.1",
     "audiosprite": "^0.7.2",
-    "cors": "^2.8.5"
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.1"
   },
   "keywords": [],
   "description": ""

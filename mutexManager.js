@@ -38,11 +38,11 @@ class MutexManager {
         }
     }
 
-    async execute(text, generationFn) {
+    async observe(text, generationFn) {
         const cacheKey = this.generateCacheKey(text);
 
         if (this.activeTasks.has(cacheKey)) {
-            console.log(`[Mutex] Waiting for ongoing generation: ${text.substring(0, 50)}...`);
+            console.log(`[Mutex] - Waiting for ongoing generation: ${text.substring(0, 50)}...`);
             return await this.activeTasks.get(cacheKey);
         }
 
@@ -52,26 +52,50 @@ class MutexManager {
 
         try {
             const result = await promise;
-            const fileMap = JSON.parse(await fs.readFile(this.fileMapPath, 'utf8').catch(() => '{}'));
-            fileMap[text] = result;
-            await fs.writeFile(this.fileMapPath, JSON.stringify(fileMap, null, 2));
-            console.log(`[Mutex] Audio cached: ${path.basename(result)}`);
             return result;
         } finally {
             this.activeTasks.delete(cacheKey);
         }
     }
 
+    async updateCache(text) {
+        try {
+            const fileMap = await fs.readFile(this.fileMapPath, 'utf8');
+            const parsedFileMap = JSON.parse(fileMap);
+            parsedFileMap[this.generateCacheKey(text)] = {
+                timestamp: new Date().toISOString(),
+                text: text,
+            };
+            await fs.writeFile(this.fileMapPath, JSON.stringify(parsedFileMap, null, 2));
+        } catch (error) {
+            if (error.code === 'ENOENT') {
+                // fileMap.json does not exist, create it
+                const newFileMap = {
+                    [this.generateCacheKey(text)]: {
+                        timestamp: new Date().toISOString(),
+                        text: text,
+                    },
+                };
+                await fs.writeFile(this.fileMapPath, JSON.stringify(newFileMap, null, 2));
+            } else {
+                console.error('[Mutex] - Error updating cache:', error);
+            }
+        }
+    }
 
     async clearCache() {
         try {
             const files = await fs.readdir(this.cacheDir);
+            // except fileMap.json delete all
+            const filesToDelete = files.filter(file => path.join(this.cacheDir, file) !== this.fileMapPath);
             await Promise.all(
-                files.map(file => fs.unlink(path.join(this.cacheDir, file)))
+                filesToDelete.map(file => fs.unlink(path.join(this.cacheDir, file)))
             );
-            console.log('[Mutex] Cache cleared');
+            // Recreate an empty fileMap.json
+            await fs.writeFile(this.fileMapPath, JSON.stringify({}, null, 2));
+            console.log('[Mutex] - Cache cleared');
         } catch (error) {
-            console.error('[Mutex] Error clearing cache:', error);
+            console.error('[Mutex] - Error clearing cache:', error);
         }
     }
 }

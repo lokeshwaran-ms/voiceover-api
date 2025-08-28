@@ -2,20 +2,43 @@ const http = require('http');
 const url = require('url');
 const { StringDecoder } = require('string_decoder');
 const archiver = require('archiver');
-const { ElevenLabsClient } = require('@elevenlabs/elevenlabs-js');
-const { corsHeaders, generateVoiceOver, spriteAudio } = require('./utils.js');
 const { rm } = require('fs/promises');
 const path = require('path');
+const dotenv = require('dotenv');
+const VoiceoverManager = require('./voiceoverManager.js');
+const { errorResponseHeaders, corsHeaders, zipResponseHeaders } = require('./headers.js');
+
+dotenv.config();
+
+// Check api key is present
+if (!process.env.ELEVENLABS_API_KEY) {
+    console.error('ELEVENLABS_API_KEY environment variable is not set.');
+    process.exit(1);
+}
+
+const voiceoverManager = new VoiceoverManager({
+    apiKey: process.env.ELEVENLABS_API_KEY,
+})
 
 const server = http.createServer((req, res) => {
     const parsedUrl = url.parse(req.url, true);
-    const errorResponeHeaders = { ...corsHeaders, 'Content-Type': 'application/json' };
-    console.log(`[${req.method}] ${parsedUrl.pathname}`);
-
+    console.log(`[${req.method}] - ${parsedUrl.pathname}`);
+    const apiKey = req.headers['x-api-key'];
+    
     // Handle preflight requests
     if (req.method === 'OPTIONS') {
         res.writeHead(204, corsHeaders);
         return res.end();
+    }
+
+    // Api Key is required to access the api
+    if (!apiKey || apiKey !== process.env.ACCESS_API_KEY) {
+        res.writeHead(401, errorResponseHeaders);
+        res.end(JSON.stringify({
+            status: "unauthorized",
+            message: "Unauthorized: Invalid or missing API key."
+        }));
+        return;
     }
 
     // Handle Generate voice over api
@@ -32,18 +55,10 @@ const server = http.createServer((req, res) => {
             decoder.end();
             try {
                 const parsedBody = JSON.parse(body || '{}');
-                const { messages, elevenlabs, audiosprite  } = parsedBody;
+                const { messages, elevenlabs } = parsedBody;
 
-                if (!elevenlabs || !elevenlabs.apiKey) {
-                    res.writeHead(400, errorResponeHeaders);
-                    return res.end(JSON.stringify({                    
-                        status: "api_key_missing",
-                        message: "ElevenLabs API key is missing."
-                    }));
-                }
-                
                 if (!Array.isArray(messages) || messages.length === 0) {
-                    res.writeHead(400, errorResponeHeaders);
+                    res.writeHead(400, errorResponseHeaders);
                     return res.end(JSON.stringify({
                         status: "invalid_messages",
                         message: "Invalid input: messages must be a non-empty array."
@@ -52,7 +67,7 @@ const server = http.createServer((req, res) => {
 
                 // Only message within 100 is valid
                 if (messages.length >= 100) {
-                    res.writeHead(400, errorResponeHeaders);
+                    res.writeHead(400, errorResponseHeaders);
                     return res.end(JSON.stringify({
                         status: "too_many_messages",
                         message: "Too many messages. Please provide up to 100 messages."
@@ -60,24 +75,19 @@ const server = http.createServer((req, res) => {
                 }
 
                 // All config is from elevenlabs are added to the elevenlabs instance
-                let elevenlabsApiKey = elevenlabs.apiKey;
                 let elevenlabsConfig = {
                     voiceId: elevenlabs?.voiceId,
                     request: elevenlabs?.request,
                     requestOptions: elevenlabs?.requestOptions,
                 };
-                const elevenlabsClient = new ElevenLabsClient({
-                    apiKey: elevenlabsApiKey,
-                });
-                const subscription = await elevenlabsClient.user.subscription.get();
                 // characterLimit is 1000 (10s) and characterCount it usage chars
-                const remainingCredits = subscription.characterLimit - subscription.characterCount;
-                const requestedCredits =  messages.map(msg => msg.text).join('').replace(/\s+/g, "").length;
+                const remainingCreditsBeforeGenerate = await voiceoverManager.getRemainingCredits();
+                const requestedCredits =  messages.map(msg => msg.text).join('').length;
 
                 // API Limit exceeded Validation
-                if (remainingCredits === 0 || remainingCredits < requestedCredits) {
-                    res.writeHead(400, { ...corsHeaders, 'Content-Type': 'application/json' });
-                    const message = `API Credit Limit reached remaining: ${remainingCredits} requested: ${requestedCredits}`;
+                if (remainingCreditsBeforeGenerate === 0 || remainingCreditsBeforeGenerate < requestedCredits) {
+                    res.writeHead(400, errorResponseHeaders);
+                    const message = `API Credit Limit reached remaining: ${remainingCreditsBeforeGenerate}, requested: ${requestedCredits}`;
                     console.log("[ElevenLabs] - " + message)
                     return res.end(JSON.stringify({
                         status: "quota_exceeded",
@@ -85,37 +95,45 @@ const server = http.createServer((req, res) => {
                     }));
                 }
 
-                const creditStatus = `ElevenLabs API Credits remaining: ${remainingCredits} requested: ${requestedCredits}`;
+                
+                const audioPaths = [];
+                const tempOutputPath = voiceoverManager.getTempOutputPath();
+
+                for (let i = 0; i < messages.length; i++) {
+                    const message = messages[i];
+                    if (message.name === undefined || message.text === undefined) {
+                        console.warn(`[ElevenLabs] - Skipping message due to missing 'name' or 'text' property: ${JSON.stringify(message)}`);
+                        continue;
+                    }
+                    const generateFilePath = await voiceoverManager.generate(message, elevenlabsConfig);
+                    audioPaths.push(generateFilePath);
+                }
+                
+                const remainingCredits = await voiceoverManager.getRemainingCredits();
+                const creditStatus = `ElevenLabs API Credits remaining: ${remainingCredits}`;
                 console.log("[ElevenLabs] - " + creditStatus);
 
-                const { audioPaths, outputPath } = 
-                    await generateVoiceOver(elevenlabsClient, elevenlabsConfig, messages);
-
-                const spriteData = await spriteAudio(audioPaths, outputPath)
+                const spriteData = await voiceoverManager.joinSprites(audioPaths, tempOutputPath)
 
                 const zipArchive = archiver('zip', { zlib: { level: 9 } });
 
-                res.writeHead(200, {
-                    ...corsHeaders,
-                    'Content-Type': 'application/zip',
-                    'Content-Disposition': 'attachment; filename="audio-sprites.zip"',
-                });
+                res.writeHead(200, zipResponseHeaders);
 
                 zipArchive.pipe(res);
 
-                zipArchive.file(`${outputPath}.mp3`, { name: 'output.mp3' });
+                zipArchive.file(`${tempOutputPath}.mp3`, { name: 'output.mp3' });
                 zipArchive.append(JSON.stringify(spriteData, null, 2), { name: 'output.json' });
 
                 zipArchive.finalize();
 
                 zipArchive.on('end', async () => {
-                    console.log('[zipArc] Zip archive sent successfully.');
-                    const tempDir = path.dirname(outputPath);
+                    console.log('[zipArc] - Zip archive sent successfully.');
+                    const tempDir = path.dirname(tempOutputPath);
                     try {
                         await rm(tempDir, { recursive: true, force: true });
-                        console.log(`[zipArc] Deleted temp directory: ${tempDir}`);
+                        console.log(`[zipArc] - Deleted temp directory: ${tempDir}`);
                     } catch (err) {
-                        console.warn(`[zipArc] Failed to delete temp directory: ${tempDir}`, err);
+                        console.warn(`[zipArc] - Failed to delete temp directory: ${tempDir}`, err);
                     }
                 });
                 
@@ -123,13 +141,13 @@ const server = http.createServer((req, res) => {
                 zipArchive.on('error', err => {
                     console.error('Archive error:', err);
                     if (!res.headersSent) {
-                        res.writeHead(500, errorResponeHeaders);
+                        res.writeHead(500, errorResponseHeaders);
                         res.end('Internal Server Error');
                     }
                 });
             } catch (err) {
                 console.error('Processing error:', err);
-                res.writeHead(400, { ...corsHeaders, 'Content-Type': 'application/json' });
+                res.writeHead(400, errorResponseHeaders);
                 if (err.body.detail.status == "quota_exceeded") {
                     console.log(`[${err.body.detail.status}]`, "ERROR****")
                     res.end(JSON.stringify({
@@ -142,38 +160,23 @@ const server = http.createServer((req, res) => {
             }
         });
     } else {
-        res.writeHead(404, errorResponeHeaders);
+        res.writeHead(404, errorResponseHeaders);
         res.end('Not Found');
     }
     
-    // Call This api to view the request body stucture of the voice-over api
-    if (req.method === 'GET' && parsedUrl.pathname === '/api/structure') {
-        res.writeHead(200, { ...corsHeaders, 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify({
-            messages: [
-                {
-                    name: "audio_file_name_1",
-                    text: "This is the first text to be converted to speech."
-                },
-                {
-                    name: "audio_file_name_2",
-                    text: "This is the second text."
-                }
-            ],
-            elevenlabs: {
-                apiKey: "YOUR_ELEVENLABS_API_KEY",
-                voiceId: "YOUR_VOICE_ID",
-                // Optional: Adjust voice settings
-                request: {
-                    stability: 0.5,
-                    similarity_boost: 0.5
-                },
-                // Optional: Add request options
-                requestOptions: {
-                    // e.g., responseType: 'stream'
-                }
-            }
-        }));
+    if (req.method === 'GET' && parsedUrl.pathname === '/api/clear-cache') {
+        try {
+            res.writeHead(200, corsHeaders);
+            res.on("end", async () => {
+                await voiceoverManager.clearCache();
+            })
+            return res.end(JSON.stringify({ status: "success", message: "Cache cleared successfully." }));
+        } catch (error) {
+            console.error('Error clearing cache:', error);
+            res.writeHead(500, errorResponeHeaders);
+            return res.end(JSON.stringify({ status: "error", message: "Failed to clear cache." }));
+        }
+    
     }
 });
 
