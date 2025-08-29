@@ -148,14 +148,16 @@ const server = http.createServer((req, res) => {
             } catch (err) {
                 console.error('Processing error:', err);
                 res.writeHead(400, errorResponseHeaders);
-                if (err.body.detail.status == "quota_exceeded") {
-                    console.log(`[${err.body.detail.status}]`, "ERROR****")
+                if (err?.body?.detail?.status === "quota_exceeded") {
                     res.end(JSON.stringify({
                         status: "quota_exceeded",
                         message: "Character limit reached."
-                    }))
+                    }));
                 } else {
-                    res.end("Invalid Request");
+                    res.end(JSON.stringify({
+                        status: "invalid_request",
+                        message: "Invalid Request"
+                    }));
                 }
             }
         });
