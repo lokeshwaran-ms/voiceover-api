@@ -6,6 +6,7 @@ class MutexManager {
     constructor(cacheDirName = "voiceover-cache") {
         this.cacheDir = path.join(__dirname, cacheDirName);
         this.fileMapPath = path.join(__dirname, cacheDirName, "fileMap.json");
+        this.cacheFileMap = new Map(); 
         this.activeTasks = new Map(); // This acts as mutex storage
         this.initializeCache();
     }
@@ -13,17 +14,26 @@ class MutexManager {
     async initializeCache() {
         try {
             await fs.access(this.cacheDir);
+            await fs.access(this.fileMapPath);
+            const fileMap = await fs.readFile(this.fileMapPath, 'utf8');
+            this.cacheFileMap = new Map(Object.entries(JSON.parse(fileMap)));
         } catch {
             await fs.mkdir(this.cacheDir, { recursive: true });
+            await fs.writeFile(this.fileMapPath, JSON.stringify({}, null, 2));
         }
     }
     
-    generateCacheKey(text) {
-        return crypto.createHash('sha256').update(text).digest('hex');
+    getCacheKey(text, voiceId) {
+        const fileKey = `${voiceId}-${text}`
+        if (this.cacheFileMap.has(fileKey)) {
+            return this.cacheFileMap.get(fileKey);
+        }
+        this.cacheFileMap.set(fileKey, crypto.randomUUID());
+        return this.cacheFileMap.get(fileKey);
     }
 
-    getCacheFilePathByText(text) {
-        const cacheKey = this.generateCacheKey(text);
+    getCacheFilePathByText(text, voiceId) {
+        const cacheKey = this.getCacheKey(text, voiceId);
         return path.join(this.cacheDir, `${cacheKey}.mp3`);
     }
 
@@ -39,47 +49,32 @@ class MutexManager {
     }
 
     async observe(text, generationFn) {
-        const cacheKey = this.generateCacheKey(text);
 
-        if (this.activeTasks.has(cacheKey)) {
+        if (this.activeTasks.has(text)) {
             console.log(`[Mutex] - Waiting for ongoing generation: ${text.substring(0, 50)}...`);
-            return await this.activeTasks.get(cacheKey);
+            return await this.activeTasks.get(text);
         }
 
         // Call the function only when we actually take the lock
         const promise = generationFn();
-        this.activeTasks.set(cacheKey, promise);
+        this.activeTasks.set(text, promise);
 
         try {
             const result = await promise;
             return result;
         } finally {
-            this.activeTasks.delete(cacheKey);
+            this.activeTasks.delete(text);
         }
     }
 
-    async updateCache(text) {
+    async updateCache(text, voiceId) {
         try {
             const fileMap = await fs.readFile(this.fileMapPath, 'utf8');
             const parsedFileMap = JSON.parse(fileMap);
-            parsedFileMap[this.generateCacheKey(text)] = {
-                timestamp: new Date().toISOString(),
-                text: text,
-            };
+            parsedFileMap[`${voiceId}-${text}`] = this.getCacheKey(text, voiceId);
             await fs.writeFile(this.fileMapPath, JSON.stringify(parsedFileMap, null, 2));
         } catch (error) {
-            if (error.code === 'ENOENT') {
-                // fileMap.json does not exist, create it
-                const newFileMap = {
-                    [this.generateCacheKey(text)]: {
-                        timestamp: new Date().toISOString(),
-                        text: text,
-                    },
-                };
-                await fs.writeFile(this.fileMapPath, JSON.stringify(newFileMap, null, 2));
-            } else {
-                console.error('[Mutex] - Error updating cache:', error);
-            }
+            console.error('[Mutex] - Error updating cache:', error);
         }
     }
 

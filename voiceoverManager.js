@@ -37,7 +37,7 @@ class VoiceoverManager extends MutexManager {
 
     async generate(message, elevenlabsConfig) {
         const { name, text } = message;
-        const cachedFilePath = this.getCacheFilePathByText(text);
+        const cachedFilePath = this.getCacheFilePathByText(text, elevenlabsConfig.voiceId);
         if (await this.fileExists(cachedFilePath)) {
             console.log(`[ElevenLabs] - Using cached audio for: "${text}"`);
             const tempFilePath = path.join(tmpdir(), `${name}.mp3`)
@@ -62,7 +62,7 @@ class VoiceoverManager extends MutexManager {
             const writeStream = fs.createWriteStream(cachedFilePath);
             await pipeline(audioStream, writeStream);
             console.log(`[ElevenLabs] - Generated audio for: "${text}"`);
-            this.updateCache(text);
+            await this.updateCache(text, elevenlabsConfig.voiceId);
         });
 
         const tempFilePath = path.join(tmpdir(), `${name}.mp3`)
