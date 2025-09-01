@@ -24,6 +24,7 @@ class MutexManager {
     }
     
     getCacheKey(text, voiceId) {
+        // IF the key matches return the key else create new cache key
         const fileKey = `${voiceId}-${text}`
         if (this.cacheFileMap.has(fileKey)) {
             return this.cacheFileMap.get(fileKey);
@@ -33,6 +34,7 @@ class MutexManager {
     }
 
     getCacheFilePathByText(text, voiceId) {
+        // If found in cache return the file path else return new cache file path.
         const cacheKey = this.getCacheKey(text, voiceId);
         return path.join(this.cacheDir, `${cacheKey}.mp3`);
     }

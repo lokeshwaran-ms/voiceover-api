@@ -7,6 +7,7 @@ const path = require('path');
 const dotenv = require('dotenv');
 const VoiceoverManager = require('./voiceoverManager.js');
 const { errorResponseHeaders, corsHeaders, zipResponseHeaders } = require('./headers.js');
+const { Mutex } = require('async-mutex');
 
 dotenv.config();
 
@@ -19,6 +20,7 @@ if (!process.env.ELEVENLABS_API_KEY) {
 const voiceoverManager = new VoiceoverManager({
     apiKey: process.env.ELEVENLABS_API_KEY,
 })
+const mutex = new Mutex(1);
 
 const server = http.createServer((req, res) => {
     const parsedUrl = url.parse(req.url, true);
@@ -54,6 +56,9 @@ const server = http.createServer((req, res) => {
         req.on('end', async () => {
             decoder.end();
             try {
+                await mutex.acquire();
+                // TODO: Code Refactor: move validation logic in separate file and 
+                //       remove mutexmanager add those methods in video manager itself
                 const parsedBody = JSON.parse(body || '{}');
                 const { messages, elevenlabs } = parsedBody;
 
@@ -108,10 +113,6 @@ const server = http.createServer((req, res) => {
                     const generateFilePath = await voiceoverManager.generate(message, elevenlabsConfig);
                     audioPaths.push(generateFilePath);
                 }
-                
-                const remainingCredits = await voiceoverManager.getRemainingCredits();
-                const creditStatus = `ElevenLabs API Credits remaining: ${remainingCredits}`;
-                console.log("[ElevenLabs] - " + creditStatus);
 
                 const spriteData = await voiceoverManager.joinSprites(audioPaths, tempOutputPath)
 
@@ -123,8 +124,6 @@ const server = http.createServer((req, res) => {
 
                 zipArchive.file(`${tempOutputPath}.mp3`, { name: 'output.mp3' });
                 zipArchive.append(JSON.stringify(spriteData, null, 2), { name: 'output.json' });
-
-                zipArchive.finalize();
 
                 zipArchive.on('end', async () => {
                     console.log('[zipArc] - Zip archive sent successfully.');
@@ -145,6 +144,9 @@ const server = http.createServer((req, res) => {
                         res.end('Internal Server Error');
                     }
                 });
+
+                // Send the zip file in response. 
+                zipArchive.finalize(); 
             } catch (err) {
                 console.error('Processing error:', err);
                 res.writeHead(400, errorResponseHeaders);
@@ -159,6 +161,12 @@ const server = http.createServer((req, res) => {
                         message: "Invalid Request"
                     }));
                 }
+            } finally {
+                console.log(`[Mutex] - Mutex released.`);
+                const remainingCredits = await voiceoverManager.getRemainingCredits();
+                const creditStatus = `ElevenLabs API Credits remaining: ${remainingCredits}`;
+                console.log("[ElevenLabs] - " + creditStatus);
+                mutex.release();
             }
         });
     } else {

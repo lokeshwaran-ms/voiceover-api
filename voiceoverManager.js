@@ -37,33 +37,31 @@ class VoiceoverManager extends MutexManager {
 
     async generate(message, elevenlabsConfig) {
         const { name, text } = message;
-        const cachedFilePath = this.getCacheFilePathByText(text, elevenlabsConfig.voiceId);
+        const cachedFilePath = this.getCacheFilePathByText(text, elevenlabsConfig.voiceId); // can be a cached file path or new cache path
         if (await this.fileExists(cachedFilePath)) {
             console.log(`[ElevenLabs] - Using cached audio for: "${text}"`);
             const tempFilePath = path.join(tmpdir(), `${name}.mp3`)
             fs.copyFileSync(cachedFilePath, tempFilePath);
             return tempFilePath;
         }
-        await this.observe(text, async () => {
-            const audioStream = await this.elevenlabsClient.textToSpeech.stream(
-                elevenlabsConfig.voiceId,
-                {
-                    modelId: 'eleven_multilingual_v2',
-                    outputFormat: 'mp3_44100_128',
-                    text,
-                    voiceSettings: {
-                        stability: 0.5,
-                        similarity_boost: 0.5,
-                    },
-                    ...elevenlabsConfig.request
+        const audioStream = await this.elevenlabsClient.textToSpeech.stream(
+            elevenlabsConfig.voiceId,
+            {
+                modelId: 'eleven_multilingual_v2',
+                outputFormat: 'mp3_44100_128',
+                text,
+                voiceSettings: {
+                    stability: 0.5,
+                    similarity_boost: 0.5,
                 },
-                elevenlabsConfig.requestOptions
-            );
-            const writeStream = fs.createWriteStream(cachedFilePath);
-            await pipeline(audioStream, writeStream);
-            console.log(`[ElevenLabs] - Generated audio for: "${text}"`);
-            await this.updateCache(text, elevenlabsConfig.voiceId);
-        });
+                ...elevenlabsConfig.request
+            },
+            elevenlabsConfig.requestOptions
+        );
+        const writeStream = fs.createWriteStream(cachedFilePath);
+        await pipeline(audioStream, writeStream);
+        console.log(`[ElevenLabs] - Generated audio for: "${text}"`);
+        await this.updateCache(text, elevenlabsConfig.voiceId);
 
         const tempFilePath = path.join(tmpdir(), `${name}.mp3`)
         fs.copyFileSync(cachedFilePath, tempFilePath);
