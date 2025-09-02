@@ -35,10 +35,11 @@ class VoiceoverManager extends MutexManager {
         return path.join(tempDir, 'output');
     }
 
-    async generate(message, elevenlabsConfig) {
+    async generate(message, elevenlabsConfig, skipCache) {
         const { name, text } = message;
         const cachedFilePath = this.getCacheFilePathByText(text, elevenlabsConfig.voiceId); // can be a cached file path or new cache path
-        if (await this.fileExists(cachedFilePath)) {
+        // For testing purpose we added this skipCache later we need to remove this
+        if (!skipCache && await this.fileExists(cachedFilePath)) {
             console.log(`[ElevenLabs] - Using cached audio for: "${text}"`);
             const tempFilePath = path.join(tmpdir(), `${name}.mp3`)
             fs.copyFileSync(cachedFilePath, tempFilePath);

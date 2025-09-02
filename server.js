@@ -60,7 +60,7 @@ const server = http.createServer((req, res) => {
                 // TODO: Code Refactor: move validation logic in separate file and 
                 //       remove mutexmanager add those methods in video manager itself
                 const parsedBody = JSON.parse(body || '{}');
-                const { messages, elevenlabs } = parsedBody;
+                const { messages, elevenlabs, skipCache } = parsedBody;
 
                 if (!Array.isArray(messages) || messages.length === 0) {
                     res.writeHead(400, errorResponseHeaders);
@@ -110,7 +110,7 @@ const server = http.createServer((req, res) => {
                         console.warn(`[ElevenLabs] - Skipping message due to missing 'name' or 'text' property: ${JSON.stringify(message)}`);
                         continue;
                     }
-                    const generateFilePath = await voiceoverManager.generate(message, elevenlabsConfig);
+                    const generateFilePath = await voiceoverManager.generate(message, elevenlabsConfig, skipCache);
                     audioPaths.push(generateFilePath);
                 }
 
