@@ -94,7 +94,7 @@ class VoiceoverManager {
         if (this.cacheFileMap.has(fileKey)) {
             return this.cacheFileMap.get(fileKey);
         }
-        this.cacheFileMap.set(fileKey, crypto.randomUUID());
+        this.cacheFileMap.set(fileKey, randomUUID());
         return this.cacheFileMap.get(fileKey);
     }
 
