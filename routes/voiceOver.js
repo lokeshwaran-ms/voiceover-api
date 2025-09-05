@@ -33,7 +33,7 @@ function handleVoiceOver(req, res, elevenlabsClient) {
                 return res.end(JSON.stringify(validation));
             }
 
-            const { messages, elevenlabs, skipCache } = parsedBody;
+            const { messages, elevenlabs } = parsedBody;
             // All config is from elevenlabs are added to the elevenlabs instance
             let elevenlabsConfig = {
                 voiceId: elevenlabs?.voiceId,
@@ -67,7 +67,7 @@ function handleVoiceOver(req, res, elevenlabsClient) {
                     console.warn(`[ElevenLabs] - Skipping message due to missing 'name' or 'text' property: ${JSON.stringify(message)}`);
                     continue;
                 }
-                const generateFilePath = await voiceoverManager.generate(message, elevenlabsConfig, skipCache);
+                const generateFilePath = await voiceoverManager.generate(message, elevenlabsConfig);
                 audioPaths.push(generateFilePath);
             }
 
