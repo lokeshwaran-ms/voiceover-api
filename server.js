@@ -3,6 +3,7 @@ const url = require('url');
 const dotenv = require('dotenv');
 const { errorResponseHeaders, corsHeaders } = require('./headers.js');
 const handleVoiceOver = require('./routes/voiceOver.js');
+const handleClearCacheByTexts = require('./routes/clearCacheByTexts.js');
 const { ElevenLabsClient } = require('@elevenlabs/elevenlabs-js');
 
 dotenv.config();
@@ -49,6 +50,8 @@ const server = http.createServer((req, res) => {
         // Handle Generate voice over api
         if (req.method === 'POST' && parsedUrl.pathname === '/api/voice-over') {
             handleVoiceOver(req, res, elevenlabsClient);
+        } else if (req.method === 'POST' && parsedUrl.pathname === '/api/voice-over/clear-cache') {
+            handleClearCacheByTexts(req, res);
         } else {
             res.writeHead(404, errorResponseHeaders);
             res.end('Not Found');

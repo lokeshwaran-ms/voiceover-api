@@ -39,11 +39,10 @@ class VoiceoverManager {
         return path.join(tempDir, 'output');
     }
 
-    async generate(message, elevenlabsConfig, skipCache) {
+    async generate(message, elevenlabsConfig) {
         const { name, text } = message;
         const cachedFilePath = this.getCachedFilePath(text, elevenlabsConfig.voiceId); // can be a cached file path or new cache path
-        // For testing purpose we added this skipCache later we need to remove this
-        if (!skipCache && await this.fileExists(cachedFilePath)) {
+        if (await this.fileExists(cachedFilePath)) {
             console.log(`[ElevenLabs] - Using cached audio for: "${text}"`);
             const tempFilePath = path.join(tmpdir(), `${name}.mp3`)
             await fs.promises.copyFile(cachedFilePath, tempFilePath);
@@ -121,6 +120,35 @@ class VoiceoverManager {
             await fs.promises.writeFile(this.fileMapPath, JSON.stringify(parsedFileMap, null, 2));
         } catch (error) {
             console.error('[ERROR] - Error updating cache:', error);
+        }
+    }
+
+    async clearCacheByTexts(texts, voiceId) {
+        try {
+            const fileMap = await fs.promises.readFile(this.fileMapPath, 'utf8');
+            let parsedFileMap = JSON.parse(fileMap);
+            let clearCachedTexts = [];
+            
+            for (const text of texts) {
+                const key = `${voiceId}-${text}`;
+                if (parsedFileMap[key]) {
+                    const cacheKey = parsedFileMap[key];
+                    const filePath = path.join(this.cacheDir, `${cacheKey}.mp3`);
+                    if (await this.fileExists(filePath)) {
+                        await fs.promises.unlink(filePath);
+                        console.log(`[Cache] - Deleted cached file: ${filePath}`);
+                    }
+                    delete parsedFileMap[key];
+                    this.cacheFileMap.delete(key);
+                    clearCachedTexts.push(text);
+                }
+            }
+            await fs.promises.writeFile(this.fileMapPath, JSON.stringify(parsedFileMap, null, 2));
+            console.log(`[Cache] - Cleared cache for ${clearCachedTexts.length} texts.`);
+            return clearCachedTexts;
+        } catch (error) {
+            console.error('[ERROR] - Error clearing cache by texts:', error);
+            return [];
         }
     }
 }
