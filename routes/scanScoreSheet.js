@@ -65,7 +65,7 @@ async function setCropToFullImage(page) {
 async function convertScorecardToPGN(filePath) {
   console.log("[PGN] Launching browser...");
   const browser = await puppeteer.launch({
-    headless: false, // use true on server
+    headless: true, // use false on launch chrome
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
 

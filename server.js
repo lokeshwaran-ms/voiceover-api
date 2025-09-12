@@ -48,12 +48,14 @@ const server = http.createServer((req, res) => {
             return;
         }
 
-        // Handle Generate voice over api
         if (req.method === 'POST' && parsedUrl.pathname === '/api/voice-over') {
+            // Handle Generate voice over api
             handleVoiceOver(req, res, elevenlabsClient);
         } else if (req.method === 'POST' && parsedUrl.pathname === '/api/voice-over/clear-cache') {
+            // Clear Voiceover Cache
             handleClearCacheByTexts(req, res);
-        } else if (req.method === 'POST' && parsedUrl.pathname === '/api/scan-score-sheet') {
+        } else if (req.method === 'POST' && parsedUrl.pathname === '/api/games/scan-score-sheet') {
+            // Scan Score Card.
             handleScanScoreSheet(req, res);
         } else {
             res.writeHead(404, errorResponseHeaders);
