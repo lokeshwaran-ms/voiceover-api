@@ -95,9 +95,14 @@ async function convertScorecardToPGN(filePath) {
 
     // Click "No, thanks"
     const noThanksBtn = "button[data-testid='crop-example-no']";
-    await page.waitForSelector(noThanksBtn, { timeout: 5000 });
-    await page.click(noThanksBtn);
-    console.log("[PGN] Clicked 'No, thanks'");
+    const elementExists = await page.evaluate(() => {
+      return !!document.querySelector("button[data-testid='crop-example-no']");
+    });
+    if (elementExists) {
+      await page.waitForSelector(noThanksBtn, { timeout: 5000 });
+      await page.click(noThanksBtn);
+      console.log("[PGN] Clicked 'No, thanks'");
+    }
 
     // Set crop
     await setCropToFullImage(page);
