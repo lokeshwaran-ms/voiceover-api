@@ -5,6 +5,7 @@ const { errorResponseHeaders, corsHeaders } = require('./headers.js');
 const handleVoiceOver = require('./routes/voiceOver.js');
 const handleClearCacheByTexts = require('./routes/clearCacheByTexts.js');
 const { ElevenLabsClient } = require('@elevenlabs/elevenlabs-js');
+const handleScanScoreSheet = require('./routes/scanScoreSheet.js');
 
 dotenv.config();
 
@@ -52,6 +53,8 @@ const server = http.createServer((req, res) => {
             handleVoiceOver(req, res, elevenlabsClient);
         } else if (req.method === 'POST' && parsedUrl.pathname === '/api/voice-over/clear-cache') {
             handleClearCacheByTexts(req, res);
+        } else if (req.method === 'POST' && parsedUrl.pathname === '/api/scan-score-sheet') {
+            handleScanScoreSheet(req, res);
         } else {
             res.writeHead(404, errorResponseHeaders);
             res.end('Not Found');
