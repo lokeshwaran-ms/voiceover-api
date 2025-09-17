@@ -51,12 +51,11 @@ async function setCropToFullImage(page) {
   await page.mouse.move(imageBox.x, imageBox.y, { steps: 10 });
   await page.mouse.up();
 
-  // Drag SE handle to bottom-right
-  const seHandle = await page.$(".ReactCrop__drag-handle.ord-se");
-  const seBox = await seHandle.boundingBox();
-  await page.mouse.move(seBox.x + seBox.width / 2, seBox.y + seBox.height / 2);
+  const neHandle = await page.$(".ReactCrop__drag-handle.ord-ne");
+  const neBox = await neHandle.boundingBox();
+  await page.mouse.move(neBox.x + neBox.width / 2, neBox.y + neBox.height / 2);
   await page.mouse.down();
-  await page.mouse.move(imageBox.x + imageBox.width, imageBox.y + imageBox.height, { steps: 10 });
+  await page.mouse.move(imageBox.width + imageBox.x, imageBox.height + imageBox.y, { steps: 10 });
   await page.mouse.up();
 
   console.log("[PGN] Crop set to full image (via drag)");
