@@ -6,6 +6,7 @@ const path = require("path");
 const util = require("util");
 const { corsHeaders } = require("../headers");
 const { Mutex } = require('async-mutex');
+const validateScanScoreSheet = require("../validators/validateScanScoreSheet");
 
 const NOTAMATE_URL = "https://www.notamate.com/convert";
 const NOTAMATE_SIGN_IN_URL = "https://www.notamate.com/auth/signin";
@@ -170,20 +171,38 @@ async function handleScanScoreSheet(req, res) {
   req.on("end", async () => {
     try {
       const data = JSON.parse(body);
-      if (!data.scorecardBase64) {
-        res.writeHead(400, { "Content-Type": "application/json" });
-        return res.end(JSON.stringify({ error: "Missing scorecardBase64 field" }));
+      const validation = validateScanScoreSheet(data);
+      if (!validation.valid) {
+        res.writeHead(400, errorResponseHeaders);
+        return res.end(JSON.stringify(validation));
       }
 
-      // Save temp file
+      // Store the files in a score-sheets folder
+      const scoreCardsDir = path.join(__dirname, '..', 'score-cards');
+      const scoreCardFileName = `scorecard_${Date.now()}.png`;
+      const tempFilePath = path.join(scoreCardsDir, scoreCardFileName);
+      if (!fs.existsSync(scoreCardsDir)) {
+        fs.mkdirSync(scoreCardsDir, { recursive: true });
+      }
       const buffer = Buffer.from(data.scorecardBase64, "base64");
-      const tempFilePath = path.join(os.tmpdir(), `scorecard_${Date.now()}.png`);
       fs.writeFileSync(tempFilePath, buffer);
 
       const pgn = await convertScorecardToPGN(tempFilePath);
 
-      // Delete temp uploaded file
-      fs.unlinkSync(tempFilePath);
+      const userEmail = data.userEmail;
+      const fileMapPath = path.join(scoreCardsDir, 'fileMap.json');
+      let fileMap = {};
+
+      if (fs.existsSync(fileMapPath)) {
+        fileMap = JSON.parse(fs.readFileSync(fileMapPath, 'utf8'));
+      }
+
+      if (!fileMap[userEmail]) {
+        fileMap[userEmail] = [];
+      }
+      fileMap[userEmail].push(scoreCardFileName);
+
+      fs.writeFileSync(fileMapPath, JSON.stringify(fileMap, null, 2));
 
       res.writeHead(200, corsHeaders);
       res.end(JSON.stringify({ pgn }));
