@@ -5,6 +5,7 @@ const os = require("os");
 const path = require("path");
 const util = require("util");
 const { corsHeaders } = require("../headers");
+const { Mutex } = require('async-mutex');
 
 const NOTAMATE_URL = "https://www.notamate.com/convert";
 const NOTAMATE_SIGN_IN_URL = "https://www.notamate.com/auth/signin";
@@ -17,6 +18,8 @@ async function loginToNotamate(page) {
   await page.waitForNavigation({ waitUntil: "networkidle2" });
 `  console.log("[Notamate] Login successful");
 `}
+
+const mutex = new Mutex(1);
 
 async function clickNext(page, labelText) {
   const stepBtnSelector =
@@ -36,8 +39,17 @@ async function clickNext(page, labelText) {
 
 async function setCropToFullImage(page) {
   await page.waitForSelector(".ReactCrop__drag-handle.ord-nw");
-  await page.waitForSelector(".ReactCrop__drag-handle.ord-se");
+  await page.waitForSelector(".ReactCrop__drag-handle.ord-ne");
 
+  // NOTE: This is a workaround. By adding a padding bottom for the image wrapper div
+  await page.evaluate(() => {
+    const wrapper = document.querySelector('.ReactCrop__child-wrapper');
+    if (wrapper) {
+      const rect = wrapper.getBoundingClientRect();
+      const padding = rect.height * 0.11; // 11% of height
+      wrapper.style.paddingBottom = `${padding}px`;
+    }
+  });
   const imageBox = await page.$eval(".ReactCrop", (el) => {
     const rect = el.getBoundingClientRect();
     return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
@@ -62,6 +74,7 @@ async function setCropToFullImage(page) {
 }
 
 async function convertScorecardToPGN(filePath) {
+  const release = await mutex.acquire();
   console.log("[PGN] Launching browser...");
   const browser = await puppeteer.launch({
     headless: true, // use false on launch chrome
@@ -144,6 +157,9 @@ async function convertScorecardToPGN(filePath) {
     console.error("[PGN] Error:", err);
     await browser.close();
     throw err;
+  } finally {
+    console.log(`[Mutex] - Mutex released.`);
+    release();
   }
 }
 
