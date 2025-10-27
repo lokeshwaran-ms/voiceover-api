@@ -1,5 +1,5 @@
 const { StringDecoder } = require('string_decoder');
-const VoiceoverManager = require('../voiceoverManager');
+const VoiceoverManager = require('../lib/voiceoverManager');
 const { corsHeaders, errorResponseHeaders } = require('../headers');
 
 function handleClearCacheByTexts(req, res) {

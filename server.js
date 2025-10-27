@@ -6,6 +6,7 @@ const handleVoiceOver = require('./routes/voiceOver.js');
 const handleClearCacheByTexts = require('./routes/clearCacheByTexts.js');
 const { ElevenLabsClient } = require('@elevenlabs/elevenlabs-js');
 const handleScanScoreSheet = require('./routes/scanScoreSheet.js');
+const handleExternalImport = require('./routes/externalImport.js');
 
 dotenv.config();
 
@@ -57,6 +58,9 @@ const server = http.createServer((req, res) => {
         } else if (req.method === 'POST' && parsedUrl.pathname === '/api/games/scan-score-sheet') {
             // Scan Score Card.
             handleScanScoreSheet(req, res);
+        }  else if (req.method === 'POST' && parsedUrl.pathname === '/api/games/external-import') {
+            // External Games import.
+            handleExternalImport(req, res);
         } else {
             res.writeHead(404, errorResponseHeaders);
             res.end('Not Found');

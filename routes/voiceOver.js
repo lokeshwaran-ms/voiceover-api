@@ -4,7 +4,7 @@ const { zipResponseHeaders, errorResponseHeaders } = require('../headers');
 const path = require('path');
 const validateVoiceOver = require('../validators/validateVoiceOver');
 const { Mutex } = require('async-mutex');
-const VoiceoverManager = require('../voiceoverManager');
+const VoiceoverManager = require('../lib/voiceoverManager');
 const { StringDecoder } = require('string_decoder');
 
 const mutex = new Mutex(1);
